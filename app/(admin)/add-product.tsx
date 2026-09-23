@@ -13,6 +13,47 @@ import { Colors, Spacing, Radius, FontSize, FontWeight } from '@/constants/theme
 
 const CATEGORIES = ['Dairy', 'Grains', 'Pulses', 'Oils', 'Fruits', 'Vegetables', 'Bakery', 'Beverages', 'Snacks', 'Other'];
 
+const InputField = ({
+  label,
+  value,
+  onChange,
+  placeholder,
+  keyboardType = 'default',
+  icon,
+}: {
+  label: string;
+  value: string;
+  onChange: (t: string) => void;
+  placeholder: string;
+  keyboardType?: any;
+  icon?: string;
+}) => (
+  <View style={styles.field}>
+    <Text style={styles.label}>{label}</Text>
+
+    <View style={styles.inputRow}>
+      {icon ? (
+        <MaterialIcons
+          name={icon as any}
+          size={18}
+          color={Colors.textMuted}
+          style={styles.inputIcon}
+        />
+      ) : null}
+
+      <TextInput
+        style={[styles.input, icon ? styles.inputWithIcon : null]}
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={Colors.textMuted}
+        keyboardType={keyboardType}
+      />
+    </View>
+  </View>
+);
+
+
 export default function AddProductScreen() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -70,27 +111,7 @@ export default function AddProductScreen() {
     setDescription(''); setIsOffer(false); setIsStorage(false);
   };
 
-  const InputField = ({
-    label, value, onChange, placeholder, keyboardType = 'default', icon
-  }: {
-    label: string; value: string; onChange: (t: string) => void;
-    placeholder: string; keyboardType?: any; icon?: string;
-  }) => (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.inputRow}>
-        {icon ? <MaterialIcons name={icon as any} size={18} color={Colors.textMuted} style={styles.inputIcon} /> : null}
-        <TextInput
-          style={[styles.input, icon ? styles.inputWithIcon : null]}
-          value={value}
-          onChangeText={onChange}
-          placeholder={placeholder}
-          placeholderTextColor={Colors.textMuted}
-          keyboardType={keyboardType}
-        />
-      </View>
-    </View>
-  );
+  
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: Colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>

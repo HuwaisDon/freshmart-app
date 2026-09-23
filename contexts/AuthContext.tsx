@@ -1,6 +1,11 @@
 // Powered by OnSpace.AI
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
-import { AuthUser, getStoredAuth, signOut as authSignOut } from '@/services/authService';
+import {
+  AuthUser,
+  getStoredAuth,
+  signOut as authSignOut,
+  updateStoredRewardPoints,
+} from '@/services/authService';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -31,10 +36,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  const updateRewardPoints = (points: number) => {
-    if (user) {
-      setUser({ ...user, rewardPoints: points });
-    }
+  const updateRewardPoints = async (points: number) => {
+    if (!user) return;
+
+    const updatedUser = {
+      ...user,
+      rewardPoints: points,
+    };
+
+    await updateStoredRewardPoints(points);
+    setUser(updatedUser);
   };
 
   return (

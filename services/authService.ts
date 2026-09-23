@@ -14,8 +14,30 @@ export interface AuthUser {
 const ADMIN_PHONES = ['0000000000', '9999999999'];
 const STAFF_PHONES = ['8888888888'];
 const DEMO_STAFF_ACCOUNTS = [
-  { id: 'admin_demo', name: 'FreshMart Admin', phone: '0000000000', email: 'admin@freshmart.demo', password: 'FreshMartAdmin123', role: 'admin' as const },
-  { id: 'staff_demo', name: 'FreshMart Staff', phone: '8888888888', email: 'staff@freshmart.demo', password: 'FreshMartStaff123', role: 'staff' as const },
+  {
+    id: 'admin_demo',
+    name: 'FreshMart Admin',
+    phone: '0000000000',
+    email: 'admin@freshmart.demo',
+    password: 'FreshMartAdmin123',
+    role: 'admin' as const,
+  },
+  {
+    id: 'admin_demo_2',
+    name: 'FreshMart Admin',
+    phone: '9999999999',
+    email: 'admin2@freshmart.demo',
+    password: 'FreshMartAdmin123',
+    role: 'admin' as const,
+  },
+  {
+    id: 'staff_demo',
+    name: 'FreshMart Staff',
+    phone: '8888888888',
+    email: 'staff@freshmart.demo',
+    password: 'FreshMartStaff123',
+    role: 'staff' as const,
+  },
 ];
 const AUTH_KEY = '@selfbill_auth';
 

@@ -6,27 +6,96 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { sendOTP } from '@/services/authService';
+import { sendOTP, signInStaff } from '@/services/authService';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '@/constants/theme';
 import { useAlert } from '@/template';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showAlert } = useAlert();
+  const { setUser } = useAuth();
 
-  const handleSendOTP = async () => {
+  const handleContinue = async () => {
     if (phone.length !== 10) {
       showAlert('Invalid Number', 'Please enter a valid 10-digit mobile number.');
       return;
     }
+
+    const isAdmin =
+      phone === '0000000000' ||
+      phone === '9999999999';
+
+    const isStaff = phone === '8888888888';
+
+    // Admin / Staff login
+    if (isAdmin || isStaff) {
+      if (!password) {
+        showAlert(
+          'Password Required',
+          'Enter the password for the Admin/Staff account.'
+        );
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const result = await signInStaff(phone, password);
+
+        if (!result.success || !result.user) {
+          showAlert(
+            'Login Failed',
+            result.message || 'Invalid credentials.'
+          );
+          return;
+        }
+
+        setUser(result.user);
+
+        router.replace('/(admin)');
+
+      } catch (error) {
+        showAlert(
+          'Login Failed',
+          error instanceof Error ? error.message : 'Unable to sign in.'
+        );
+      } finally {
+        setLoading(false);
+      }
+
+      return;
+    }
+
+    // Customer login
     setLoading(true);
-    const result = await sendOTP(phone);
-    setLoading(false);
-    if (result.success) {
-      router.push({ pathname: '/auth/otp', params: { phone } });
+
+    try {
+      const result = await sendOTP(phone);
+
+      if (result.success) {
+        router.push({
+          pathname: '/auth/otp',
+          params: { phone },
+        });
+      } else {
+        showAlert(
+          'Unable to Send OTP',
+          result.message || 'Please try again.'
+        );
+      }
+    } catch (error) {
+      showAlert(
+        'Login Failed',
+        error instanceof Error ? error.message : 'Unable to continue.'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -62,26 +131,66 @@ export default function LoginScreen() {
               maxLength={10}
             />
           </View>
+          {(
+            phone === '0000000000' ||
+            phone === '9999999999' ||
+            phone === '8888888888'
+          ) ? (
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: Colors.card,
+                  borderRadius: Radius.lg,
+                  borderWidth: 1,
+                  borderColor: Colors.border,
+                  marginTop: Spacing.sm,
+                },
+              ]}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Admin/Staff Password"
+              placeholderTextColor={Colors.textMuted}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+          ) : null}
 
           <Pressable
             style={({ pressed }) => [styles.button, pressed && styles.buttonPressed, loading && styles.buttonDisabled]}
-            onPress={handleSendOTP}
+            onPress={handleContinue}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color={Colors.background} />
             ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
+              <Text style={styles.buttonText}>
+                {(
+                  phone === '0000000000' ||
+                  phone === '9999999999' ||
+                  phone === '8888888888'
+                )
+                  ? 'Login'
+                  : 'Send OTP'}
+              </Text>
             )}
           </Pressable>
 
-          <View style={styles.demoBox}>
-            <Text style={styles.demoTitle}>Demo Credentials</Text>
-            <Text style={styles.demoLine}>Customer: any 10-digit number</Text>
-            <Text style={styles.demoLine}>Admin: 0000000000 or 9999999999</Text>
-            <Text style={styles.demoLine}>Staff: 8888888888</Text>
-            <Text style={styles.demoLine}>OTP: 1234 (always)</Text>
-          </View>
+          <Text style={styles.demoLine}>
+            Customer: any 10-digit number → OTP 1234
+          </Text>
+          <Text style={styles.demoLine}>
+            Admin: 0000000000 / 9999999999
+          </Text>
+          <Text style={styles.demoLine}>
+            Admin Password: FreshMartAdmin123
+          </Text>
+          <Text style={styles.demoLine}>
+            Staff: 8888888888
+          </Text>
+          <Text style={styles.demoLine}>
+            Staff Password: FreshMartStaff123
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

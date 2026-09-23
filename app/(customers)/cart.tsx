@@ -1,5 +1,5 @@
 // Powered by OnSpace.AI
-import React, { useState } from 'react';
+
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput,
   ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform
@@ -10,9 +10,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { useAlert } from '@/template';
-import { createOrder, generateOrderId, generateQRCode } from '@/services/orderService';
-import { deductRewardPoints, POINTS_TO_RUPEE, EARN_RATE } from '@/services/rewardService';
-import { updateStoredRewardPoints } from '@/services/authService';
+import { useEffect, useState } from 'react';
+import { createOrder, generateOrderId } from '@/services/orderService';
+import { EARN_RATE } from '@/services/rewardService';
 import { Order } from '@/constants/mockData';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '@/constants/theme';
 import { useRouter } from 'expo-router';
@@ -21,7 +21,8 @@ export default function CartScreen() {
   const { items, removeFromCart, updateQuantity, clearCart, subtotal, totalItems } = useCart();
   const { user, updateRewardPoints } = useAuth();
   const { showAlert } = useAlert();
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'pickup'>('upi');
+  const [paymentMethod, setPaymentMethod] =
+  useState<'upi' | 'pay_on_pickup'>('upi');
   const [usePoints, setUsePoints] = useState(false);
   const [loading, setLoading] = useState(false);
   const insets = useSafeAreaInsets();
@@ -31,56 +32,140 @@ export default function CartScreen() {
   const pointsDiscount = usePoints ? Math.min(availablePoints, Math.floor(subtotal * 0.2)) : 0;
   const total = subtotal - pointsDiscount;
   const earnablePoints = Math.floor((total / 100) * EARN_RATE);
-
+  useEffect(() => {
+    if (paymentMethod === 'pay_on_pickup') {
+      setUsePoints(false);
+    }
+  }, [paymentMethod]);
   const handleCheckout = async () => {
-    if (items.length === 0) return;
+    if (items.length === 0 || !user) return;
+
     setLoading(true);
 
-    const orderId = generateOrderId();
-    const qrCode = generateQRCode(orderId, user!.id, total);
+    try {
+      const orderId = generateOrderId();
 
-    const order: Order = {
-      id: orderId,
-      customerId: user!.id,
-      customerName: user!.name,
-      items: items.map(i => ({
-        productId: i.product.id,
-        productName: i.product.name,
-        quantity: i.quantity,
-        price: i.product.discountedPrice ?? i.product.price,
-        total: (i.product.discountedPrice ?? i.product.price) * i.quantity,
-      })),
-      subtotal,
-      rewardDiscount: pointsDiscount,
-      total,
-      paymentMethod,
-      paymentStatus: paymentMethod === 'upi' ? 'paid' : 'pending',
-      qrCode,
-      createdAt: new Date().toISOString(),
-    };
+      const isPayOnPickup = paymentMethod === 'pay_on_pickup';
 
-    await createOrder(order);
+      const order: Order = {
+        id: orderId,
+        customerId: user.id,
+        customerName: user.name,
 
-    if (usePoints && pointsDiscount > 0) {
-      await deductRewardPoints(user!.id, pointsDiscount);
-      const newPts = availablePoints - pointsDiscount + earnablePoints;
-      await updateStoredRewardPoints(newPts);
-      updateRewardPoints(newPts);
-    } else {
-      const newPts = availablePoints + earnablePoints;
-      await updateStoredRewardPoints(newPts);
-      updateRewardPoints(newPts);
+        items: items.map(i => ({
+          productId: i.product.id,
+          productName: i.product.name,
+          quantity: i.quantity,
+          price: i.product.discountedPrice ?? i.product.price,
+          total:
+            (i.product.discountedPrice ?? i.product.price) *
+            i.quantity,
+        })),
+
+        subtotal,
+        rewardDiscount: pointsDiscount,
+        total,
+
+        paymentMethod,
+
+        /*
+        * Pay on Pickup stays pending.
+        * UPI is considered paid immediately in this prototype.
+        */
+        paymentStatus: isPayOnPickup ? 'pending' : 'paid',
+
+        fulfillmentMethod: isPayOnPickup
+          ? 'pickup'
+          : 'self_checkout',
+
+        pickupStatus: isPayOnPickup
+          ? 'pending'
+          : 'not_required',
+
+        createdAt: new Date().toISOString(),
+      };
+
+      const result = await createOrder(order);
+
+      /*
+      * IMPORTANT:
+      * Pay-on-Pickup rewards are NOT awarded here.
+      * Stock is also NOT deducted here.
+      *
+      * createOrder() handles stock/reward transitions for
+      * immediately-paid orders.
+      */
+
+      if (!isPayOnPickup && pointsDiscount > 0) {
+        /*
+        * Reward redemption is intentionally handled locally here
+        * for already-paid orders.
+        *
+        * The prototype's reward service remains the source of
+        * customer reward balance.
+        */
+        const newPoints = Math.max(
+          0,
+          availablePoints - pointsDiscount
+        );
+
+        updateRewardPoints(
+          newPoints + result.rewardPointsEarned
+        );
+      } else if (!isPayOnPickup) {
+        updateRewardPoints(
+          availablePoints + result.rewardPointsEarned
+        );
+      }
+
+      clearCart();
+
+      showAlert(
+        isPayOnPickup ? 'Pickup Order Created!' : 'Order Placed!',
+        isPayOnPickup
+          ? `Order ${orderId} is ready for pickup.\n\nPay at the store when collecting your order.`
+          : `Order ${orderId} placed.\n+${result.rewardPointsEarned} reward points earned!`,
+        [
+          {
+            text: 'View Orders',
+            onPress: () => router.push('/(customers)/orders'),
+          },
+        ]
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to place order.';
+
+      showAlert('Unable to Place Order', message);
+    } finally {
+      setLoading(false);
     }
-
-    clearCart();
-    setLoading(false);
-
-    showAlert(
-      'Order Placed!',
-      `Order ${orderId} placed.\n+${earnablePoints} reward points earned!\n\nView your QR in Orders tab.`,
-      [{ text: 'View Orders', onPress: () => router.push('/(customers)/orders') }]
-    );
   };
+
+  //   await createOrder(order);
+
+  //   if (usePoints && pointsDiscount > 0) {
+  //     await deductRewardPoints(user!.id, pointsDiscount);
+  //     const newPts = availablePoints - pointsDiscount + earnablePoints;
+  //     await updateStoredRewardPoints(newPts);
+  //     updateRewardPoints(newPts);
+  //   } else {
+  //     const newPts = availablePoints + earnablePoints;
+  //     await updateStoredRewardPoints(newPts);
+  //     updateRewardPoints(newPts);
+  //   }
+
+  //   clearCart();
+  //   setLoading(false);
+
+  //   showAlert(
+  //     'Order Placed!',
+  //     `Order ${orderId} placed.\n+${earnablePoints} reward points earned!\n\nView your QR in Orders tab.`,
+  //     [{ text: 'View Orders', onPress: () => router.push('/(customers)/orders') }]
+  //   );
+  // };
 
   if (items.length === 0) {
     return (
@@ -134,7 +219,7 @@ export default function CartScreen() {
           })}
 
           {/* Reward Points */}
-          {availablePoints > 0 ? (
+          {availablePoints > 0 && paymentMethod !== 'pay_on_pickup' ? (
             <View style={styles.rewardBox}>
               <View style={styles.rewardLeft}>
                 <MaterialIcons name="stars" size={20} color={Colors.gold} />
@@ -164,11 +249,11 @@ export default function CartScreen() {
                 <Text style={[styles.payLabel, paymentMethod === 'upi' && styles.payLabelActive]}>Pay via UPI</Text>
               </Pressable>
               <Pressable
-                style={[styles.payOption, paymentMethod === 'pickup' && styles.payOptionActive]}
-                onPress={() => setPaymentMethod('pickup')}
+                style={[styles.payOption, paymentMethod === 'pay_on_pickup' && styles.payOptionActive]}
+                onPress={() => setPaymentMethod('pay_on_pickup')}
               >
                 <Text style={styles.payIcon}>🛒</Text>
-                <Text style={[styles.payLabel, paymentMethod === 'pickup' && styles.payLabelActive]}>Pay on Pickup</Text>
+                <Text style={[styles.payLabel, paymentMethod === 'pay_on_pickup' && styles.payLabelActive]}>Pay on Pickup</Text>
               </Pressable>
             </View>
           </View>

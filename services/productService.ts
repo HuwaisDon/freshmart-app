@@ -93,13 +93,30 @@ const applyStockDelta = async (id: string, delta: number, movement: Omit<StockMo
   return all[idx];
 };
 
-export const addStockByBarcode = async (barcode: string, quantity: number, actor: AuthUser): Promise<Product> => {
-  if (!isStaffUser(actor)) throw new Error('Only staff can add inventory.');
-  if (!Number.isInteger(quantity) || quantity <= 0) throw new Error('Stock quantity must be a positive whole number.');
-  const product = await getProductByBarcode(barcode);
-  if (!product) throw new Error('No product found for this barcode.');
-  return applyStockDelta(product.id, quantity, { reason: 'stock_in', performedBy: actor.id, performedRole: actor.role });
-};
+export const addStockByBarcode = async (
+  barcode: string,
+  quantity: number,
+  actor: AuthUser
+): Promise<Product> => {
+  if (!isStaffUser(actor)) {
+    throw new Error('Only staff can add inventory.');
+  }
 
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new Error('Stock quantity must be a positive whole number.');
+  }
+
+  const product = await getProductByBarcode(barcode);
+
+  if (!product) {
+    throw new Error('No product found for this barcode.');
+  }
+
+  return applyStockDelta(product.id, quantity, {
+    reason: 'stock_in',
+    performedBy: actor.id,
+    performedRole: actor.role === 'admin' ? 'admin' : 'staff',
+  });
+};
 export const deductStockForOrder = async (productId: string, quantity: number, orderId: string): Promise<Product> =>
   applyStockDelta(productId, -quantity, { reason: 'order_deduction', performedBy: 'system', performedRole: 'system', orderId });
